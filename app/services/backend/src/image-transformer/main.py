@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 
 class ImageTransformer:
     def __init__(self, images):
-        print("New image transformer instance made.")
+        logger.info("Starting image transforming.")
         self.input_img_path = str(
             Path(__file__).resolve().parents[1] / "images" / images[0]
         )
@@ -30,7 +30,7 @@ class ImageTransformer:
             self.refine_edges()
             # self.perform_meanshift()
         else:
-            logger.info("Meanshift process returned None.")
+            logger.error("Image could not be read.")
 
     def read_image(self):
         """Reads an image to numpy array.
@@ -50,31 +50,29 @@ class ImageTransformer:
     def refine_edges(self):
         """Refines edges of the image and turns the image into black & white."""
         # Apply thresholding to image
-        img = cv2.threshold(np.uint8(self.image), 40, 255, cv2.THRESH_BINARY_INV)[1]
-        morphed = cv2.morphologyEx(img, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
+        img = cv2.threshold(np.uint8(self.image), 38, 255, cv2.THRESH_BINARY_INV)[1]
+        morphed = cv2.morphologyEx(img, cv2.MORPH_CLOSE, np.ones((4, 4), np.uint8))
         # Finding contours
-        contours = cv2.findContours(morphed, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[0]
+        contours = cv2.findContours(morphed, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)[0]
         cnts = sorted(contours, key=cv2.contourArea, reverse=True)
-        # contours.sort(key=len, reverse=True)
         # Array that contains contours that will be removed
         noisy_contours = []
         sample = []
         # Gathering sample of contour areas
         for contour in cnts:
             sample.append(cv2.contourArea(contour))
-        # Filtering contours that are below mean of the sample
+        # Filtering contours that are far below the mean of the sample
         for contour in cnts:
-            if cv2.contourArea(contour) < 1.5 * st.mean(sample):
+            if cv2.contourArea(contour) < 0.5 * st.mean(sample):
                 # Appending small contours to an array
                 noisy_contours.append(contour)
-        # Filtering out noise
-        denoised = cv2.drawContours(
-            morphed, noisy_contours, -1, color=(0, 0, 0), thickness=1
+
+        # Filtering out noise by drawing the mask on the image
+        cv2.drawContours(
+            morphed, noisy_contours, -1, color=(255, 255, 255), thickness=2
         )
-        # Perform thresholding again
-        inverted = cv2.threshold(denoised, 5, 255, cv2.THRESH_BINARY_INV)[1]
         # Applying smoothening
-        median = cv2.medianBlur(inverted, 5)
+        median = cv2.medianBlur(morphed, 5)
         self.image = median
         logger.info("Refining edges - Success.")
         cv2.imwrite("edges.png", self.image)
