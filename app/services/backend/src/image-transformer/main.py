@@ -15,6 +15,8 @@ logger.setLevel(logging.INFO)
 
 # Global variables
 ix, iy = -1, -1
+target_width = 1920
+target_height = 1080
 
 
 class ImageTransformer:
@@ -43,6 +45,27 @@ class ImageTransformer:
         else:
             logger.error("Image could not be read.")
 
+    def resize_image(self, image, target_width, target_height):
+        original_height, original_width = image.shape[:2]
+
+        # Check if resizing is needed
+        if original_width <= target_width and original_height <= target_height:
+            return image
+
+        # Calculate the scaling factor
+        width_ratio = target_width / original_width
+        height_ratio = target_height / original_height
+        scale_factor = min(width_ratio, height_ratio)
+
+        # Calculate the new dimensions
+        new_width = int(original_width * scale_factor)
+        new_height = int(original_height * scale_factor)
+
+        # Resize the image
+        resized_image = cv2.resize(image, (new_width, new_height))
+
+        return resized_image
+
     def read_image(self):
         """Reads an image to numpy array.
 
@@ -53,7 +76,7 @@ class ImageTransformer:
         img = cv2.imread(self.input_img_path, 0)
         if img is not None:
             logger.info("Reading image - Success.")
-            self.image = img
+            self.image = self.resize_image(img, target_width, target_height)
             return True
         else:
             return False
@@ -168,23 +191,25 @@ class ImageTransformer:
                     ix, iy = px, py
                     self.painted_pixels.append((px, py))
 
-    '''
-        Presents the image to the user and allows them to draw areas 
-        of interest where edge detection needs to be redone.
-    '''
-
     def show_image(self):
+        '''
+            Presents the image to the user and allows them to draw areas 
+            of interest where edge detection needs to be redone.
+        '''
         color_img = cv2.cvtColor(self.image, cv2.COLOR_GRAY2BGR)
         self.overlay = np.zeros_like(color_img)
         self.painted_pixels.clear()
 
-        cv2.namedWindow('Result Preview')
+        cv2.namedWindow('Result Preview', cv2.WINDOW_NORMAL)
         # Register the mouse callback function
         cv2.setMouseCallback('Result Preview', self.draw_paint)
+        pixels_selected = False
+        # Looping to listen for input
         while True:
+
             # Display the image with overlay
             output = cv2.addWeighted(
-                color_img, 0.7, self.overlay, self.overlay_alpha, 0)
+                color_img, 0.8, self.overlay, self.overlay_alpha, 0)
             cv2.imshow('Result Preview', output)
             # Wait for user interaction
             key = cv2.waitKey(1) & 0xFF
@@ -196,15 +221,17 @@ class ImageTransformer:
 
             # Press 's' to save the drawing
             elif key == ord('s'):
+                logger.info("S pressed.")
                 # Saving image.
                 cv2.imwrite(self.output_img_name, self.image)
-                cv2.waitKey(0) & 0xFF
+                cv2.destroyAllWindows()
                 break
 
             # Press 'd' to apply the redos
             elif key == ord('d'):
                 if self.painted_pixels:
                     self.refine_edges(redo=True)
+                    break
 
             # Press 'q' to quit
             elif key == ord('q'):
@@ -229,7 +256,6 @@ class ImageTransformer:
             elif key == ord('t'):
                 self.threshold = max(1, self.threshold - 1)
                 logger.info(f'Threshold is {self.threshold}')
-
         cv2.destroyAllWindows()
 
 
